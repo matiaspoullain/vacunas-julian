@@ -1,0 +1,567 @@
+---
+title: "Informe de vacunación de menores de edad"
+output: html_notebook
+---
+
+ 3 partes: I. datos filtrados
+           II. tabla con datos.
+           III. gráficos
+ 
+
+```{r}
+
+#I. Datos filtrados
+
+library(data.table)
+library(tidyverse)
+library(janitor)
+
+#Nombre del directorio donde se encuentra el csv con los datos.
+setwd("C:/Users/J/Downloads/datos_nomivac_covid19")
+#nombre del csv con los datos.
+file <- "datos_nomivac_covid19.csv"
+
+### ABRO LA BASE Y ME QUEDO CON SOLO MENORES DE EDAD (de a pedazos para que se lo banque mi compu)
+
+### ABRO LA BASE Y ME QUEDO CON SOLO MENORES DE EDAD (de a pedazos para que se lo banque mi compu)
+
+
+
+
+#Antes de correr, correr esta linea, para aumentar la velocidad: maximiza los nucleos que va a usar data.table
+setDTthreads(threads = 0, restore_after_fork = NULL)
+
+
+temp <- tempfile()
+download.file("https://sisa.msal.gov.ar/datos/descargas/covid-19/files/datos_nomivac_covid19.zip",temp)
+final <- fread(unzip(temp, file), encoding = "UTF-8", header = TRUE)
+unlink(temp)
+
+final <- final[grupo_etario == "<12" | grupo_etario =="12-17"]
+
+# nfilas <- length(count.fields(file, sep = ","))
+# sk <- 2000001
+# leidas <- 2000000 
+# head <- fread(file, nrows=leidas, header = TRUE)
+# head <- head %>% select(grupo_etario, jurisdiccion_residencia, jurisdiccion_residencia_id,
+#                          jurisdiccion_aplicacion, jurisdiccion_aplicacion_id,
+#                          fecha_aplicacion, orden_dosis) %>%  filter(grupo_etario=="<12"|grupo_etario=="12-17")
+# 
+# 
+# nfilas <- nfilas - leidas
+# npedazo <- 1
+# 
+# #Este loop while quiz?s puede trabarse porque le exige bastante a la compu. En el caso en el que se traba, simplemente correr de nuevo el while y va a retomar desde donde estaba. Lo que hace es ir leyendo de a poco el csv y filtrando lo que necesitamos en un objeto "pedazo1".
+# 
+# 
+# while (nfilas > 0) {
+# temporal <- fread(file, skip = sk, nrows=leidas)
+# temporal <- temporal %>% select(V2,V3,V4,V7,V8,V11,V16) %>%  filter(V2=="<12"|V2=="12-17")
+# assign(paste0("pedazo", npedazo),temporal)
+#  if(npedazo > 1) {
+#   pedazo1 <-  rbind(pedazo1,get(paste0("pedazo", npedazo)))
+#   }
+# sk <-  sk + 2000000
+# nfilas <-  nfilas - 2000000
+# npedazo <- npedazo + 1
+# rm(temporal)
+# rm(pedazo2,pedazo3,pedazo4,pedazo5,pedazo6,pedazo7,pedazo8,pedazo9,pedazo10,pedazo11, pedazo12,pedazo13,pedazo14,pedazo15,pedazo16,pedazo17,pedazo18,pedazo19,pedazo20,pedazo21, pedazo22,pedazo23,pedazo24,pedazo25,pedazo26,pedazo27,pedazo28,pedazo29,pedazo30,pedazo31, pedazo32,pedazo33,pedazo34,pedazo35,pedazo36,pedazo37,pedazo38,pedazo39,pedazo40,pedazo41)
+# print(npedazo)
+# }
+# 
+# pedazo1 <- pedazo1 %>% rename(grupo_etario=V2, jurisdiccion_residencia=V3, jurisdiccion_residencia_id=V4, jurisdiccion_aplicacion=V7,jurisdiccion_aplicacion_id=V8,fecha_aplicacion=V11,orden_dosis=V16)
+
+# final <- rbind(head,pedazo1) %>% mutate(provi = case_when(jurisdiccion_residencia_id == 14 ~ "Cordoba",
+#                                                      jurisdiccion_residencia_id == 30 ~ "Entre Rios",
+#                                                      jurisdiccion_residencia_id == 58 ~ "Neuquen",
+#                                                      jurisdiccion_residencia_id == 90 ~ "Tucuman",
+#                                                      jurisdiccion_residencia_id == 62 ~ "Rio Negro",
+#                                                      TRUE~jurisdiccion_residencia))
+
+final <- final %>% mutate(provi = case_when(jurisdiccion_residencia_id == 14 ~ "Cordoba",
+                                                     jurisdiccion_residencia_id == 30 ~ "Entre Rios",
+                                                     jurisdiccion_residencia_id == 58 ~ "Neuquen",
+                                                     jurisdiccion_residencia_id == 90 ~ "Tucuman",
+                                                     jurisdiccion_residencia_id == 62 ~ "Rio Negro",
+                                                     TRUE~jurisdiccion_residencia))
+
+```
+
+
+```{r}
+### II. Tabla con datos
+
+#Convierto el scrit de Franco en la función "tablita". Imput: la base filtrada (final) y el csv con la poblacion (poblacion). Output: la tablita que usamos para armar algunos graficos.
+
+poblacion <- read_csv("poblacion.csv") %>% mutate(prov = case_when(prov=="Corrientes" ~ "Cordoba",
+                                      prov == "Cordoba"~ "Corrientes",
+                                      TRUE ~ prov))
+
+
+
+base_a <- final %>% 
+  select(-jurisdiccion_aplicacion, -jurisdiccion_aplicacion_id,  -jurisdiccion_residencia_id) %>%
+  group_by(grupo_etario, provi, orden_dosis) %>%
+  tally() %>%
+  ungroup() %>%
+  mutate(orden_dosis = if_else(orden_dosis == 1, "primera_dosis",
+                               if_else(orden_dosis == 2, "segunda_dosis",
+                                       if_else(orden_dosis == 3, "tercera_dosis",
+                                               "cuarta_dosis")))) %>% 
+  rename(cantidad_dosis = n,
+         prov = provi) %>%
+  group_by(grupo_etario, prov, orden_dosis) %>% summarise(sum(cantidad_dosis)) %>% spread(key="orden_dosis",value = "sum(cantidad_dosis)")%>% mutate(cuarta_dosis=as.double(cuarta_dosis)) %>% 
+   mutate_all(funs(replace_na(.,0))) %>% 
+  mutate(aplicadas_total = primera_dosis+segunda_dosis+tercera_dosis+cuarta_dosis)%>%
+  left_join(poblacion) %>% #join con base de poblacion
+  mutate(poblacion = as.double(poblacion)) %>%
+  ungroup() %>%
+  filter(!is.na(poblacion)) %>%
+  # Ahora creamos variables que calculan porcentajes #
+  mutate(aplicadas_pop = round(( aplicadas_total / poblacion) * 100, 1),
+         porc_ap_primdos = round((primera_dosis / poblacion * 100),1),
+         porc_ap_segdos = round((segunda_dosis / poblacion)*100, 1),
+         porc_ap_soloprimerados = porc_ap_primdos - porc_ap_segdos) %>%
+  print()
+
+base_b <- final %>%
+  select(-jurisdiccion_aplicacion, -jurisdiccion_aplicacion_id, -jurisdiccion_residencia_id, -grupo_etario) %>%
+  group_by(provi, orden_dosis) %>%
+  tally() %>%
+  ungroup() %>%
+  mutate(orden_dosis = if_else(orden_dosis == 1, "primera_dosis",
+                               if_else(orden_dosis == 2, "segunda_dosis",
+                                       if_else(orden_dosis == 3, "tercera_dosis",
+                                               "cuarta_dosis")))) %>%
+  rename(cantidad_dosis = n,
+         prov = provi) %>%
+  mutate(grupo_etario = "menores") %>%
+  group_by(grupo_etario, prov, orden_dosis) %>% summarise(sum(cantidad_dosis)) %>% spread(key="orden_dosis",value = "sum(cantidad_dosis)")%>% mutate(cuarta_dosis=as.double(cuarta_dosis)) %>% 
+   mutate_all(funs(replace_na(.,0))) %>% mutate(aplicadas_total = primera_dosis+segunda_dosis+tercera_dosis+cuarta_dosis)  %>%
+  left_join(poblacion) %>% #join con base de poblacion
+  mutate(poblacion = as.double(poblacion)) %>%
+  ungroup() %>%
+  filter(!is.na(poblacion)) %>%
+  # Ahora creamos variables que calculan porcentajes #
+  mutate(aplicadas_pop = round(( aplicadas_total / poblacion) * 100, 1),
+         porc_ap_primdos = round((primera_dosis / poblacion * 100),1),
+         porc_ap_segdos = round((segunda_dosis / poblacion)*100, 1),
+         porc_ap_soloprimerados = porc_ap_primdos - porc_ap_segdos) %>%
+  print()
+
+tablita <- bind_rows(base_b, base_a)
+
+
+
+tabla_menores <- tablita %>% filter(grupo_etario=="menores") %>%  arrange(-porc_ap_primdos)
+tabla_1217 <- tablita %>% filter(grupo_etario=="12-17") %>%  arrange(-porc_ap_primdos)
+tabla_12 <- tablita %>% filter(grupo_etario=="<12") %>%  arrange(-porc_ap_primdos)
+
+Total_menores  <-  summarise_all(tabla_menores, ~if(is.numeric(.)) sum(.) else "TOTAL PAIS") %>%
+  mutate(aplicadas_pop = round(( aplicadas_total / poblacion) * 100, 1),
+         porc_ap_primdos = round((primera_dosis / poblacion * 100),1),
+         porc_ap_segdos = round((segunda_dosis / poblacion)*100, 1),
+         porc_ap_soloprimerados = porc_ap_primdos - porc_ap_segdos,
+         grupo_etario = "menores" ) 
+
+tablamenores<- rbind(tabla_menores,Total_menores) %>% arrange(-porc_ap_primdos)
+
+Total_1217  <-  summarise_all(tabla_1217, ~if(is.numeric(.)) sum(.) else "TOTAL PAIS") %>%
+  mutate(aplicadas_pop = round(( aplicadas_total / poblacion) * 100, 1),
+         porc_ap_primdos = round((primera_dosis / poblacion * 100),1),
+         porc_ap_segdos = round((segunda_dosis / poblacion)*100, 1),
+         porc_ap_soloprimerados = porc_ap_primdos - porc_ap_segdos,
+         grupo_etario = "12-17" ) 
+
+tabla1217 <- rbind(tabla_1217,Total_1217) %>% arrange(-porc_ap_primdos)
+
+Total_12  <-  summarise_all(tabla_12, ~if(is.numeric(.)) sum(.) else "TOTAL PAIS") %>%
+  mutate(aplicadas_pop = round(( aplicadas_total / poblacion) * 100, 1),
+         porc_ap_primdos = round((primera_dosis / poblacion * 100),1),
+         porc_ap_segdos = round((segunda_dosis / poblacion)*100, 1),
+         porc_ap_soloprimerados = porc_ap_primdos - porc_ap_segdos,
+         grupo_etario = "<12" ) 
+
+tabla12<- rbind(tabla_12,Total_12) %>% arrange(-porc_ap_primdos)
+
+
+bind_rows(tablamenores, tabla_1217,tabla12) %>%
+  write_csv("tablita.csv")
+
+```
+
+
+```{r}
+
+#III. Gráficos
+#Funcionan a partir de la base filtrada. Acordarse de ACTUALIZAR LA FECHA LIMITE cada vez que se corre. 
+
+
+library(zoo)
+library(scales)
+
+menores_12_diarias <- final %>%
+  select(-jurisdiccion_residencia_id, -jurisdiccion_aplicacion, -jurisdiccion_aplicacion_id) %>%
+  rename(prov = jurisdiccion_residencia) %>% 
+  mutate(aplicacion = 1) %>%
+  group_by(grupo_etario, orden_dosis, fecha_aplicacion)%>% 
+  summarize(aplicaciones = sum(aplicacion)) %>% 
+  # filtro
+  filter(grupo_etario == "<12") %>%
+  filter(orden_dosis != 3) %>%
+  filter(orden_dosis != 4) %>%
+  arrange(fecha_aplicacion) %>%
+  group_by(orden_dosis) %>% 
+  mutate(seven_avg= rollmean(aplicaciones, 7,
+                             align="right", 
+                             fill=NA),
+         orden_dosis = ifelse(orden_dosis == 1, "Primera dosis", "Segunda dosis"),
+         Dosis = as.factor(orden_dosis)) %>% group_by(fecha_aplicacion,orden_dosis) %>% slice(1)
+
+ggplot(data = menores_12_diarias, aes(x=fecha_aplicacion,
+             y=aplicaciones, 
+             fill = Dosis)) +
+  geom_col(alpha = 4/10, position = "identity")+
+  geom_line(aes(y = seven_avg, color = Dosis), 
+            size = 0.5)+
+  scale_x_date(date_breaks = "1 month", 
+               limits = as.Date(c('2021-10-10','2022-02-18')))+
+  scale_y_continuous(labels = comma_format(big.mark = ".",
+                                           decimal.mark = ","))+
+  theme_minimal()+
+  theme(text = element_text(size = 17))+
+  labs(title="Primera y segunda dosis en población de 3 a 11 años (ventana movil 7 días)",
+       y="Numero de dosis aplicadas",
+       x= "Fecha")
+  
+  ggsave(plot = last_plot(), 
+         filename = "menores12ventana.png",
+         bg = "transparent",
+         height = 10, width = 12)
+
+# Entre 12 y 17
+
+menores_1217_diarias <- final %>%
+  select(-jurisdiccion_residencia_id, -jurisdiccion_aplicacion, -jurisdiccion_aplicacion_id) %>%
+  rename(prov = jurisdiccion_residencia) %>% 
+  mutate(aplicacion = 1) %>%
+  group_by(grupo_etario, orden_dosis, fecha_aplicacion)%>% 
+  summarize(aplicaciones = sum(aplicacion)) %>% 
+  # filtro
+  filter(grupo_etario == "12-17") %>%
+  filter(orden_dosis != 3) %>%
+  filter(orden_dosis != 4) %>%
+  arrange(fecha_aplicacion) %>%
+  group_by(orden_dosis) %>% 
+  mutate(seven_avg= rollmean(aplicaciones, 7,
+                             align="right", 
+                             fill=NA),
+         orden_dosis = ifelse(orden_dosis == 1, "Primera dosis", "Segunda dosis"),
+         Dosis = as.factor(orden_dosis)) %>% group_by(fecha_aplicacion,orden_dosis) %>% slice(1)
+
+ggplot(data = menores_1217_diarias, aes(x=fecha_aplicacion,
+                                      y=aplicaciones, 
+                                      fill = Dosis)) +
+  geom_col(alpha = 4/10, position = "identity")+
+  geom_line(aes(y = seven_avg, color = Dosis), 
+            size = 0.5)+
+  scale_x_date(date_breaks = "1 month", 
+               limits = as.Date(c('2021-07-30','2022-02-18')))+
+  scale_y_continuous(labels = comma_format(big.mark = ".",
+                                           decimal.mark = ","))+
+  theme_minimal()+
+  theme(text = element_text(size = 17))+
+  labs(title="Primera y segunda dosis en población de 12 a 17 años (ventana movil 7 días)",
+       y="Numero de dosis aplicadas",
+       x= "Fecha")
+
+ggsave(plot = last_plot(), 
+       filename = "menores12a17ventana.png",
+       bg = "transparent",
+       height = 10, width = 12)
+
+# Menores
+
+menores_18_diarias <- final %>%
+  select(-jurisdiccion_residencia_id, -jurisdiccion_aplicacion, -jurisdiccion_aplicacion_id) %>%
+  rename(prov = jurisdiccion_residencia) %>% 
+  mutate(aplicacion = 1) %>%
+  group_by(orden_dosis, fecha_aplicacion)%>% 
+  summarize(aplicaciones = sum(aplicacion)) %>% 
+  # filtro
+  filter(orden_dosis != 3) %>%
+  filter(orden_dosis != 4) %>%
+  arrange(fecha_aplicacion) %>%
+  group_by(orden_dosis) %>% 
+  mutate(seven_avg= rollmean(aplicaciones, 7,
+                             align="right", 
+                             fill=NA),
+         orden_dosis = ifelse(orden_dosis == 1, "Primera dosis", "Segunda dosis"),
+         Dosis = as.factor(orden_dosis)) %>% group_by(fecha_aplicacion,orden_dosis) %>% slice(1)
+
+ggplot(data = menores_18_diarias, aes(x=fecha_aplicacion,
+                                        y=aplicaciones, 
+                                        fill = Dosis)) +
+  geom_col(alpha = 4/10, position = "identity")+
+  geom_line(aes(y = seven_avg, color = Dosis), 
+            size = 0.5)+
+  scale_x_date(date_breaks = "1 month", 
+               limits = as.Date(c('2021-07-30','2022-02-18')))+
+  scale_y_continuous(labels = comma_format(big.mark = ".",
+                                           decimal.mark = ","))+
+  theme_minimal()+
+  theme(text = element_text(size = 17))+
+  labs(title="Primera y segunda dosis en población de 3 a 17 años (ventana movil 7 días)",
+       y="Numero de dosis aplicadas",
+       x= "Fecha")
+
+ggsave(plot = last_plot(), 
+       filename = "menoresventana.png",
+       bg = "transparent",
+       height = 10, width = 12)
+
+#Acumulados
+
+# menores de 12
+
+menores_12_diarias <- final %>%
+  select(-jurisdiccion_residencia_id, -jurisdiccion_aplicacion, jurisdiccion_aplicacion_id) %>%
+  rename(prov = jurisdiccion_residencia) %>% 
+  mutate(aplicacion = 1) %>%
+  group_by(grupo_etario, orden_dosis, fecha_aplicacion)%>% 
+  summarize(aplicaciones = sum(aplicacion)) %>% 
+  # filtro
+  filter(grupo_etario == "<12") %>%
+  filter(orden_dosis != 3) %>%
+  filter(orden_dosis != 4) %>%
+  arrange(fecha_aplicacion) %>%
+  group_by(orden_dosis) %>% 
+  mutate(acumuladas = cumsum(aplicaciones),
+         orden_dosis = ifelse(orden_dosis == 1, "Primera dosis", "Segunda dosis"),
+         Dosis = as.factor(orden_dosis)) %>% 
+  mutate(poblacion = 6729285) %>% 
+  mutate(prop = (acumuladas/poblacion)*100) %>% group_by(fecha_aplicacion,orden_dosis) %>% slice(1)
+
+ggplot(data = menores_12_diarias) +
+  geom_line(aes(x = fecha_aplicacion, y = prop, color = Dosis), size = 0.5)+
+  geom_area(aes(x = fecha_aplicacion, y = prop, fill = Dosis), 
+             position = 'identity', alpha = 0.3) +
+  scale_x_date(date_breaks = "1 month", 
+               limits = as.Date(c('2021-10-10','2022-02-18')))+
+  scale_y_continuous(labels = comma_format(big.mark = ".",
+                                           decimal.mark = ","))+
+  theme_minimal()+
+  theme(text = element_text(size = 17))+
+  labs(title="Primera y segunda dosis en población de 3 a 11 años (Acumuladas)",
+       y="Porcentaje de cobertura",
+       x= "Fecha")
+
+ggsave(plot = last_plot(), 
+       filename = "menores12acumulado.png",
+       bg = "transparent",
+       height = 10, width = 12)
+
+# menores de 12 a 17
+
+menores_1217_diarias <- final %>%
+  select(-jurisdiccion_residencia_id, -jurisdiccion_aplicacion, jurisdiccion_aplicacion_id) %>%
+  rename(prov = jurisdiccion_residencia) %>% 
+  mutate(aplicacion = 1) %>%
+  group_by(grupo_etario, orden_dosis, fecha_aplicacion)%>% 
+  summarize(aplicaciones = sum(aplicacion)) %>% 
+  # filtro
+  filter(grupo_etario == "12-17") %>%
+  filter(orden_dosis != 3) %>%
+  filter(orden_dosis != 4) %>%
+  filter(orden_dosis != 6) %>%
+  arrange(fecha_aplicacion) %>% 
+  group_by(orden_dosis) %>% 
+  mutate(acumuladas = cumsum(aplicaciones),
+         orden_dosis = ifelse(orden_dosis == 1, "Primera dosis", "Segunda dosis"),
+         Dosis = as.factor(orden_dosis))%>% 
+  mutate(poblacion = 4242923) %>% 
+  mutate(prop = (acumuladas/poblacion)*100) %>% group_by(fecha_aplicacion,orden_dosis) %>% slice(1)
+  
+
+ggplot(data = menores_1217_diarias) +
+  geom_line(aes(x = fecha_aplicacion, y = prop, color = Dosis), size = 0.5)+
+  geom_area(aes(x = fecha_aplicacion, y = prop, fill = Dosis), 
+            position = 'identity', alpha = 0.3) +
+  scale_x_date(date_breaks = "1 month", 
+               limits = as.Date(c('2021-07-30','2022-02-18')))+
+  scale_y_continuous(labels = comma_format(big.mark = ".",
+                                           decimal.mark = ","))+
+  theme_minimal()+
+  theme(text = element_text(size = 17))+
+  labs(title="Primera y segunda dosis en población de 12 a 17 años (Acumuladas)",
+       y="Porcentaje de cobertura",
+       x= "Fecha")
+
+ggsave(plot = last_plot(), 
+       filename = "menores12a17acumulado.png",
+       bg = "transparent",
+       height = 10, width = 12)
+
+# menores
+
+menores_18_diarias <- final %>%
+  select(-jurisdiccion_residencia_id, -jurisdiccion_aplicacion, jurisdiccion_aplicacion_id) %>%
+  rename(prov = jurisdiccion_residencia) %>% 
+  mutate(aplicacion = 1) %>%
+  group_by(grupo_etario, orden_dosis, fecha_aplicacion)%>% 
+  summarize(aplicaciones = sum(aplicacion)) %>% 
+  # filtro
+  filter(orden_dosis != 3) %>%
+  filter(orden_dosis != 4) %>%
+  filter(orden_dosis != 6) %>%
+  arrange(fecha_aplicacion) %>% 
+  group_by(orden_dosis) %>% 
+  mutate(acumuladas = cumsum(aplicaciones),
+         orden_dosis = ifelse(orden_dosis == 1, "Primera dosis", "Segunda dosis"),
+         Dosis = as.factor(orden_dosis))%>% 
+  mutate(poblacion = 10972208) %>% 
+  mutate(prop = (acumuladas/poblacion)*100) %>% group_by(fecha_aplicacion,orden_dosis) %>% slice(1)
+
+
+ggplot(data = menores_18_diarias) +
+  geom_line(aes(x = fecha_aplicacion, y = prop, color = Dosis), size = 0.5)+
+  geom_area(aes(x = fecha_aplicacion, y = prop, fill = Dosis), 
+            position = 'identity', alpha = 0.3) +
+  scale_x_date(date_breaks = "1 month", 
+               limits = as.Date(c('2021-07-30','2022-02-18')))+
+  scale_y_continuous(labels = comma_format(big.mark = ".",
+                                           decimal.mark = ","))+
+  theme_minimal()+
+  theme(text = element_text(size = 17))+
+  labs(title="Primera y segunda dosis en población de 3 a 17 años (Acumuladas)",
+       y="Porcentaje de cobertura",
+       x= "Fecha")
+
+ggsave(plot = last_plot(), 
+       filename = "menoresacumulado.png",
+       bg = "transparent",
+       height = 10, width = 12)
+
+
+###Acumulados en total
+
+ggplot(data = menores_18_diarias) +
+  geom_line(aes(x = fecha_aplicacion, y = acumuladas, color = Dosis), size = 0.5)+
+  geom_area(aes(x = fecha_aplicacion, y = acumuladas, fill = Dosis), 
+            position = 'identity', alpha = 0.3) +
+  scale_x_date(date_breaks = "1 month", 
+               limits = as.Date(c('2021-07-30','2022-02-18')))+
+  scale_y_continuous(labels = comma_format(big.mark = ".",
+                                           decimal.mark = ","))+
+  theme_minimal()+
+  theme(text = element_text(size = 17))+
+  labs(title="Primera y segunda dosis población de 3 a 17 años (Acumuladas)",
+       y="Cantidad de dosis acumuladas",
+       x= "Fecha")
+
+ggsave(plot = last_plot(), 
+       filename = "menoresacumulado3.png",
+       bg = "transparent",
+       height = 10, width = 12)
+
+
+# menores de 12
+
+ggplot(data = menores_12_diarias) +
+  geom_line(aes(x = fecha_aplicacion, y = acumuladas, color = Dosis), size = 0.5)+
+  geom_area(aes(x = fecha_aplicacion, y = acumuladas, fill = Dosis), 
+             position = 'identity', alpha = 0.3) +
+  scale_x_date(date_breaks = "1 month", 
+               limits = as.Date(c('2021-10-10','2022-02-18')))+
+  scale_y_continuous(labels = comma_format(big.mark = ".",
+                                           decimal.mark = ","))+
+  theme_minimal()+
+  theme(text = element_text(size = 17))+
+  labs(title="Primera y segunda dosis en población de 3 a 11 años (Acumuladas)",
+       y="Cantidad de dosis acumuladas",
+       x= "Fecha")
+
+ggsave(plot = last_plot(), 
+       filename = "menores12acumulado3.png",
+       bg = "transparent",
+       height = 10, width = 12)
+
+# menores de 12 a 17
+
+
+ggplot(data = menores_1217_diarias) +
+  geom_line(aes(x = fecha_aplicacion, y = acumuladas, color = Dosis), size = 0.5)+
+  geom_area(aes(x = fecha_aplicacion, y = acumuladas, fill = Dosis), 
+            position = 'identity', alpha = 0.3) +
+  scale_x_date(date_breaks = "1 month", 
+               limits = as.Date(c('2021-07-30','2022-02-18')))+
+  scale_y_continuous(labels = comma_format(big.mark = ".",
+                                           decimal.mark = ","))+
+  theme_minimal()+
+  theme(text = element_text(size = 17))+
+  labs(title="Primera y segunda dosis en población de 12 a 17 años (Acumuladas)",
+       y="Cantidad de dosis acumuladas",
+       x= "Fecha")
+
+ggsave(plot = last_plot(), 
+       filename = "menores12a17acumulado3.png",
+       bg = "transparent",
+       height = 10, width = 12)
+
+
+tmen <- tablamenores %>%  gather("Dosis","porcentaje",11:12) %>%
+  mutate(dosis = case_when(Dosis == "porc_ap_soloprimerados"~ "Primera Dosis",
+                           Dosis == "porc_ap_segdos" ~ "Esquema completo"),
+         porcentaje = porcentaje/100)
+
+ggplot(data = tmen, aes(x =reorder(prov, porc_ap_primdos), porcentaje, fill = factor(dosis, levels = c("Primera Dosis","Esquema completo"))))+
+  geom_bar(position="stack", stat="identity")+
+  scale_fill_manual("Esquema de vacunación", values = c("Primera Dosis"= "#50b7b2","Esquema completo" = "#f79525"))+
+  coord_flip()+
+  geom_text(aes(label = scales::percent(porcentaje)), size = 3, color = "black", position ="stack")+
+  labs(x = "Localidad", y = "Porcentaje de vacunados", fill = "Esquema de vacunación")+theme_classic() +  scale_y_continuous(labels = scales::percent)
+
+ggsave(plot = last_plot(), 
+       filename = "gdebarras_menores.png",
+       bg = "transparent",
+       height = 10, width = 12)
+
+
+t1217 <- tabla1217 %>%  gather("Dosis","porcentaje",11:12) %>%
+  mutate(dosis = case_when(Dosis == "porc_ap_soloprimerados"~ "Primera Dosis",
+                           Dosis == "porc_ap_segdos" ~ "Esquema completo"),
+         porcentaje = porcentaje/100)
+
+ggplot(data = t1217, aes(x =reorder(prov, porc_ap_primdos), porcentaje, fill = factor(dosis, levels = c("Primera Dosis","Esquema completo"))))+
+  geom_bar(position="stack", stat="identity")+
+  scale_fill_manual("Esquema de vacunación", values = c("Primera Dosis"= "#50b7b2","Esquema completo" = "#f79525"))+
+  coord_flip()+
+  geom_text(aes(label = scales::percent(porcentaje)), size = 3, color = "black", position ="stack")+
+  labs(x = "Localidad", y = "Porcentaje de vacunados", fill = "Esquema de vacunación")+theme_classic() +  scale_y_continuous(labels = scales::percent)
+
+ggsave(plot = last_plot(), 
+       filename = "gdebarras_1217.png",
+       bg = "transparent",
+       height = 10, width = 12)
+
+t12<- tabla12 %>%  gather("Dosis","porcentaje",11:12) %>%
+  mutate(dosis = case_when(Dosis == "porc_ap_soloprimerados"~ "Primera Dosis",
+                           Dosis == "porc_ap_segdos" ~ "Esquema completo"),
+         porcentaje = porcentaje/100)
+
+ggplot(data = t12, aes(x =reorder(prov, porc_ap_primdos), porcentaje, fill = factor(dosis, levels = c("Primera Dosis","Esquema completo"))))+
+  geom_bar(position="stack", stat="identity")+
+  scale_fill_manual("Esquema de vacunación", values = c("Primera Dosis"= "#50b7b2","Esquema completo" = "#f79525"))+
+  coord_flip()+
+  geom_text(aes(label = scales::percent(porcentaje)), size = 3, color = "black", position ="stack")+
+  labs(x = "Localidad", y = "Porcentaje de vacunados", fill = "Esquema de vacunación")+theme_classic() +  scale_y_continuous(labels = scales::percent)
+
+ggsave(plot = last_plot(), 
+       filename = "gdebarras_12.png",
+       bg = "transparent",
+       height = 10, width = 12)
+
+
+```
+
+
