@@ -16,8 +16,16 @@ library(data.table)
 library(tidyverse)
 library(janitor)
 
+library(lubridate)
+
+hora.deseada <- ymd_hms("2022-02-17 9:00:00 -03")
+
+(tiempo.espera <- as.numeric(difftime(hora.deseada, Sys.time(), unit = "secs")))
+
+Sys.sleep(tiempo.espera)
+
 #Nombre del directorio donde se encuentra el csv con los datos.
-setwd("C:/Users/J/Downloads/datos_nomivac_covid19")
+#setwd("C:/Users/J/Downloads/datos_nomivac_covid19")
 #nombre del csv con los datos.
 file <- "datos_nomivac_covid19.csv"
 
@@ -562,6 +570,13 @@ ggsave(plot = last_plot(),
        height = 10, width = 12)
 
 
+```
+```{r}
+shell("git add .")
+shell('git commit -m "inital commit"')
+shell('git config --global user.email "matias.poullain@gmail.com')
+shell('git config --global user.name "matiaspoullain"')
+shell("git push")
 ```
 
 
